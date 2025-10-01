@@ -23,7 +23,7 @@ jest.mock('../src/database/database', () => ({
 jest.mock('jsonwebtoken');
 jest.mock('../src/config', () => ({ jwtSecret: 'test-secret' }));
 
-const { DB, Role } = require('../src/database/database');
+const { DB } = require('../src/database/database');
 const { setAuthUser } = require('../src/routes/authRouter');
 const franchiseRouter = require('../src/routes/franchiseRouter');
 
