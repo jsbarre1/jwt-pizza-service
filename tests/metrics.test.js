@@ -140,6 +140,30 @@ describe('Metrics', () => {
 
 
 
+  describe('trackAuth', () => {
+    test('tracks successful authentication with user ID', () => {
+      const initialSuccessful = metrics.authMetrics.successful;
+      metrics.trackAuth(true, 123);
+
+      expect(metrics.authMetrics.successful).toBe(initialSuccessful + 1);
+      expect(metrics.userMetrics.activeUsers.has(123)).toBe(true);
+    });
+
+    test('tracks successful authentication without user ID', () => {
+      const initialSuccessful = metrics.authMetrics.successful;
+      metrics.trackAuth(true);
+
+      expect(metrics.authMetrics.successful).toBe(initialSuccessful + 1);
+    });
+
+    test('tracks failed authentication', () => {
+      const initialFailed = metrics.authMetrics.failed;
+      metrics.trackAuth(false);
+
+      expect(metrics.authMetrics.failed).toBe(initialFailed + 1);
+    });
+  });
+
   describe('trackNewUser', () => {
     test('increments new user count and adds to active users', () => {
       const initialNewUsers = metrics.userMetrics.newUsers;
@@ -225,11 +249,18 @@ describe('Metrics', () => {
       expect(fetch).toHaveBeenCalledWith('http://test-metrics.com', {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain',
-          'Authorization': 'Bearer test-metrics-key'
+          'Content-Type': 'application/json',
+          'Authorization': expect.stringMatching(/^Basic /)
         },
-        body: expect.stringContaining('request,source=test-source,metric=total 5')
+        body: expect.any(String)
       });
+
+      // Verify the body is valid JSON in OTLP format
+      const callArgs = fetch.mock.calls[0];
+      const body = JSON.parse(callArgs[1].body);
+      expect(body).toHaveProperty('resourceMetrics');
+      expect(body.resourceMetrics).toHaveLength(1);
+      expect(body.resourceMetrics[0]).toHaveProperty('scopeMetrics');
     });
 
     test('logs error when Grafana request fails', async () => {
@@ -238,7 +269,8 @@ describe('Metrics', () => {
       fetch.mockResolvedValue({
         ok: false,
         status: 500,
-        statusText: 'Internal Server Error'
+        statusText: 'Internal Server Error',
+        text: jest.fn().mockResolvedValue('Error details')
       });
 
       await metrics.sendMetricsToGrafana();
@@ -246,7 +278,8 @@ describe('Metrics', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Failed to send metrics to Grafana:',
         500,
-        'Internal Server Error'
+        'Internal Server Error',
+        'Error details'
       );
 
       consoleErrorSpy.mockRestore();
