@@ -1,34 +1,52 @@
 const os = require('os');
 const config = require('./config.js');
 
-class MetricsBuilder {
+class OtelMetricsBuilder {
   constructor(source) {
     this.source = source;
     this.metrics = [];
   }
 
-  addMetric(metricPrefix, metricName, metricValue, attributes = {}) {
+  addMetric(metricName, metricValue, unit = '', attributes = {}) {
+    // Add source to attributes
+    const allAttributes = [
+      { key: 'source', value: { stringValue: this.source } },
+      ...Object.entries(attributes).map(([key, value]) => ({
+        key,
+        value: { stringValue: String(value) }
+      }))
+    ];
+
+    // Create OTLP gauge metric
     const metric = {
-      name: `${metricPrefix},source=${this.source}`,
-      value: metricValue,
-      timestamp: Date.now(),
+      name: metricName,
+      unit: unit,
+      gauge: {
+        dataPoints: [
+          {
+            asDouble: Number(metricValue),
+            timeUnixNano: String(Date.now() * 1000000), // Convert ms to nanoseconds
+            attributes: allAttributes
+          }
+        ]
+      }
     };
-
-    if (metricName) {
-      metric.name += `,metric=${metricName}`;
-    }
-
-    for (const [key, value] of Object.entries(attributes)) {
-      metric.name += `,${key}=${value}`;
-    }
 
     this.metrics.push(metric);
   }
 
-  toString() {
-    return this.metrics
-      .map((metric) => `${metric.name} ${metric.value} ${metric.timestamp}`)
-      .join('\n');
+  toOtelFormat() {
+    return {
+      resourceMetrics: [
+        {
+          scopeMetrics: [
+            {
+              metrics: this.metrics
+            }
+          ]
+        }
+      ]
+    };
   }
 
   clear() {
@@ -146,46 +164,53 @@ class Metrics {
   }
 
   collectMetrics() {
-    const builder = new MetricsBuilder(this.source);
+    const builder = new OtelMetricsBuilder(this.source);
 
-    builder.addMetric('request', 'total', this.httpMetrics.totalRequests);
-    builder.addMetric('request', 'active', this.httpMetrics.activeRequests);
-    builder.addMetric('request', 'errors', this.httpMetrics.errors);
+    // HTTP Request Metrics
+    builder.addMetric('http_requests_total', this.httpMetrics.totalRequests, 'requests');
+    builder.addMetric('http_requests_active', this.httpMetrics.activeRequests, 'requests');
+    builder.addMetric('http_requests_errors_total', this.httpMetrics.errors, 'requests');
 
+    // Per-endpoint metrics
     for (const [endpoint, data] of this.httpMetrics.requests.entries()) {
       const [method, path] = endpoint.split(':');
       const avgLatency = data.count > 0 ? (data.totalTime / data.count).toFixed(2) : 0;
 
-      builder.addMetric('request', 'count', data.count, { method, path });
-      builder.addMetric('request', 'latency', avgLatency, { method, path });
+      builder.addMetric('http_request_count_total', data.count, 'requests', { method, path });
+      builder.addMetric('http_request_duration_ms', avgLatency, 'ms', { method, path });
     }
 
-    builder.addMetric('auth', 'successful', this.authMetrics.successful);
-    builder.addMetric('auth', 'failed', this.authMetrics.failed);
+    // Authentication Metrics
+    builder.addMetric('auth_attempts_total', this.authMetrics.successful, 'attempts', { status: 'success' });
+    builder.addMetric('auth_attempts_total', this.authMetrics.failed, 'attempts', { status: 'fail' });
 
-    builder.addMetric('user', 'new', this.userMetrics.newUsers);
-    builder.addMetric('user', 'active', this.userMetrics.activeUsers.size);
+    // User Metrics
+    builder.addMetric('user_registrations_total', this.userMetrics.newUsers, 'users');
+    builder.addMetric('user_active_total', this.userMetrics.activeUsers.size, 'users');
 
-    builder.addMetric('purchase', 'attempts', this.purchaseMetrics.attempts);
-    builder.addMetric('purchase', 'successful', this.purchaseMetrics.successful);
-    builder.addMetric('purchase', 'failed', this.purchaseMetrics.failed);
-    builder.addMetric('purchase', 'revenue', this.purchaseMetrics.totalRevenue.toFixed(2));
-    builder.addMetric('purchase', 'pizzas', this.purchaseMetrics.pizzasSold);
+    // Purchase Metrics
+    builder.addMetric('pizza_purchase_attempts_total', this.purchaseMetrics.attempts, 'purchases');
+    builder.addMetric('pizza_purchase_total', this.purchaseMetrics.successful, 'purchases', { status: 'success' });
+    builder.addMetric('pizza_purchase_total', this.purchaseMetrics.failed, 'purchases', { status: 'fail' });
+    builder.addMetric('pizza_revenue_total', this.purchaseMetrics.totalRevenue.toFixed(2), 'USD');
+    builder.addMetric('pizza_sold_total', this.purchaseMetrics.pizzasSold, 'pizzas');
 
+    // Purchase latency metrics
     if (this.purchaseMetrics.latencies.length > 0) {
       const avgLatency = this.purchaseMetrics.latencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.latencies.length;
-      builder.addMetric('purchase', 'latency', avgLatency.toFixed(2), { type: 'success' });
+      builder.addMetric('pizza_purchase_duration_ms', avgLatency.toFixed(2), 'ms', { status: 'success' });
     }
 
     if (this.purchaseMetrics.failureLatencies.length > 0) {
       const avgFailureLatency = this.purchaseMetrics.failureLatencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.failureLatencies.length;
-      builder.addMetric('purchase', 'latency', avgFailureLatency.toFixed(2), { type: 'failure' });
+      builder.addMetric('pizza_purchase_duration_ms', avgFailureLatency.toFixed(2), 'ms', { status: 'fail' });
     }
 
-    builder.addMetric('system', 'cpu', this.getCpuUsagePercentage());
-    builder.addMetric('system', 'memory', this.getMemoryUsagePercentage());
+    // System Metrics
+    builder.addMetric('system_cpu_usage_percent', this.getCpuUsagePercentage(), '%');
+    builder.addMetric('system_memory_usage_percent', this.getMemoryUsagePercentage(), '%');
 
-    return builder.toString();
+    return builder.toOtelFormat();
   }
 
   async sendMetricsToGrafana() {
@@ -196,17 +221,21 @@ class Metrics {
     const metricsData = this.collectMetrics();
 
     try {
+      // Encode API key for Basic Auth (format: "username:password")
+      const authHeader = 'Basic ' + Buffer.from(this.config.apiKey).toString('base64');
+
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
         },
-        body: metricsData,
+        body: JSON.stringify(metricsData),
       });
 
       if (!response.ok) {
-        console.error('Failed to send metrics to Grafana:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Failed to send metrics to Grafana:', response.status, response.statusText, errorText);
       }
     } catch (error) {
       console.error('Error sending metrics to Grafana:', error);
