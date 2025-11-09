@@ -215,20 +215,18 @@ class Metrics {
 
   async sendMetricsToGrafana() {
     if (!this.config.url || !this.config.apiKey) {
+      console.log('Metrics not configured - skipping send');
       return;
     }
 
     const metricsData = this.collectMetrics();
 
     try {
-      // Encode API key for Basic Auth (format: "username:password")
-      const authHeader = 'Basic ' + Buffer.from(this.config.apiKey).toString('base64');
-
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authHeader,
+          'Authorization': `Basic ${Buffer.from(this.config.apiKey).toString('base64')}`,
         },
         body: JSON.stringify(metricsData),
       });
@@ -236,6 +234,9 @@ class Metrics {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Failed to send metrics to Grafana:', response.status, response.statusText, errorText);
+        console.error('Request body sample:', JSON.stringify(metricsData).substring(0, 500));
+      } else {
+        console.log('✓ Metrics sent successfully');
       }
     } catch (error) {
       console.error('Error sending metrics to Grafana:', error);
