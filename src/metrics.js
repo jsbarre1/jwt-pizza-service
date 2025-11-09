@@ -37,7 +37,7 @@ class MetricsBuilder {
 }
 
 class Metrics {
-  constructor(config) {
+  constructor(config = {}) {
     this.config = config;
     this.source = config.source || 'jwt-pizza-service';
 
@@ -70,7 +70,9 @@ class Metrics {
 
     this.systemMetrics = {};
 
-    this.startPeriodicReporting();
+    if (this.config.url && this.config.apiKey) {
+      this.startPeriodicReporting();
+    }
   }
 
   requestTracker = (req, res, next) => {
@@ -187,6 +189,10 @@ class Metrics {
   }
 
   async sendMetricsToGrafana() {
+    if (!this.config.url || !this.config.apiKey) {
+      return;
+    }
+
     const metricsData = this.collectMetrics();
 
     try {
