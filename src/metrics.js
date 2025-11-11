@@ -194,17 +194,15 @@ class Metrics {
     builder.addMetric('pizza_sold_total', this.purchaseMetrics.pizzasSold, 'pizzas');
 
     // Purchase latency metrics
-    if (this.purchaseMetrics.latencies.length > 0) {
-      const avgLatency = this.purchaseMetrics.latencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.latencies.length;
-      builder.addMetric('pizza_purchase_duration_ms', avgLatency.toFixed(2), 'ms', { status: 'success' });
-      this.purchaseMetrics.latencies = [];
+    for (const latency of this.purchaseMetrics.latencies) {
+      builder.addMetric('pizza_purchase_duration_ms', latency, 'ms', { status: 'success' });
     }
+    this.purchaseMetrics.latencies = [];
 
-    if (this.purchaseMetrics.failureLatencies.length > 0) {
-      const avgFailureLatency = this.purchaseMetrics.failureLatencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.failureLatencies.length;
-      builder.addMetric('pizza_purchase_duration_ms', avgFailureLatency.toFixed(2), 'ms', { status: 'fail' });
-      this.purchaseMetrics.failureLatencies = [];
+    for (const latency of this.purchaseMetrics.failureLatencies) {
+      builder.addMetric('pizza_purchase_duration_ms', latency, 'ms', { status: 'fail' });
     }
+    this.purchaseMetrics.failureLatencies = [];
 
     // System Metrics
     builder.addMetric('system_cpu_usage_percent', this.getCpuUsagePercentage(), '%');
