@@ -89,8 +89,8 @@ orderRouter.post(
       body: JSON.stringify({ diner: { id: req.user.id, name: req.user.name, email: req.user.email }, order }),
     });
 
-    const latency = Date.now() - startTime;
     const j = await r.json();
+    const latency = Date.now() - startTime;
 
     const pizzaCount = order.items.length;
     const revenue = order.items.reduce((sum, item) => sum + item.price, 0);
