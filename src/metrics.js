@@ -8,7 +8,6 @@ class OtelMetricsBuilder {
   }
 
   addMetric(metricName, metricValue, unit = '', attributes = {}) {
-    // Add source to attributes
     const allAttributes = [
       { key: 'source', value: { stringValue: this.source } },
       ...Object.entries(attributes).map(([key, value]) => ({
@@ -17,7 +16,6 @@ class OtelMetricsBuilder {
       }))
     ];
 
-    // Create OTLP gauge metric
     const metric = {
       name: metricName,
       unit: unit,
@@ -25,7 +23,7 @@ class OtelMetricsBuilder {
         dataPoints: [
           {
             asDouble: Number(metricValue),
-            timeUnixNano: String(Date.now() * 1000000), // Convert ms to nanoseconds
+            timeUnixNano: String(Date.now() * 1000000),
             attributes: allAttributes
           }
         ]
@@ -199,11 +197,13 @@ class Metrics {
     if (this.purchaseMetrics.latencies.length > 0) {
       const avgLatency = this.purchaseMetrics.latencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.latencies.length;
       builder.addMetric('pizza_purchase_duration_ms', avgLatency.toFixed(2), 'ms', { status: 'success' });
+      this.purchaseMetrics.latencies = [];
     }
 
     if (this.purchaseMetrics.failureLatencies.length > 0) {
       const avgFailureLatency = this.purchaseMetrics.failureLatencies.reduce((a, b) => a + b, 0) / this.purchaseMetrics.failureLatencies.length;
       builder.addMetric('pizza_purchase_duration_ms', avgFailureLatency.toFixed(2), 'ms', { status: 'fail' });
+      this.purchaseMetrics.failureLatencies = [];
     }
 
     // System Metrics
