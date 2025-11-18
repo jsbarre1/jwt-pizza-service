@@ -12,14 +12,19 @@ class Logger {
     // Create a deep copy to avoid mutating the original
     const sanitized = JSON.parse(JSON.stringify(data));
 
-    // Fields that should be sanitized
-    const sensitiveFields = ['password', 'token', 'apiKey', 'jwtSecret', 'authorization'];
+    // Fields that should be sanitized (exact matches or specific patterns)
+    const sensitiveFields = ['password', 'token', 'apiKey', 'jwtSecret'];
+    const sensitivePatterns = [/^authorization$/i]; // Only exact "authorization" field
 
     const sanitizeObject = (obj) => {
       if (typeof obj !== 'object' || obj === null) return;
 
       for (const key in obj) {
-        if (sensitiveFields.some(field => key.toLowerCase().includes(field.toLowerCase()))) {
+        const shouldRedact =
+          sensitiveFields.some(field => key.toLowerCase().includes(field.toLowerCase())) ||
+          sensitivePatterns.some(pattern => pattern.test(key));
+
+        if (shouldRedact) {
           obj[key] = '***REDACTED***';
         } else if (typeof obj[key] === 'object') {
           sanitizeObject(obj[key]);
