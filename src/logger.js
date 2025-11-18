@@ -100,6 +100,7 @@ class Logger {
       path: req.path,
       hasAuthorization: !!req.headers.authorization,
       requestBody: req.body,
+      ip: req.ip || req.connection.remoteAddress,
     };
 
     // Capture the original res.json and res.send to log response
@@ -131,6 +132,7 @@ class Logger {
         requestBody: requestDetails.requestBody,
         responseBody: responseBody,
         durationMs: duration,
+        ip: requestDetails.ip,
       });
     });
 
