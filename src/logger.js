@@ -100,7 +100,7 @@ class Logger {
       path: req.path,
       hasAuthorization: !!req.headers.authorization,
       requestBody: req.body,
-      ip: req.ip || req.connection.remoteAddress,
+      ip: req.ip || req.connection?.remoteAddress || 'unknown',
     };
 
     // Capture the original res.json and res.send to log response
